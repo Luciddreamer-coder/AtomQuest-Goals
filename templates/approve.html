@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Review Goals — {{ employee.name }}{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb & Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 animate-in">
+  <div class="d-flex align-items-center gap-3">
+    <a href="{{ url_for('manager_team') }}" class="btn btn-light btn-sm rounded-circle" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="fw-bold mb-0">{{ employee.name }}</h4>
+      <p class="text-muted small mb-0">
+        <i class="bi bi-envelope me-1"></i>{{ employee.email }} &middot; 
+        <span class="badge bg-primary-subtle text-primary-emphasis">{{ employee.department or 'General' }}</span>
+      </p>
+    </div>
+  </div>
+  <div class="d-flex gap-2 mt-2 mt-md-0">
+    <a href="{{ url_for('manager_checkin_view', employee_id=employee.id) }}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-calendar-check me-1"></i>View Check-Ins
+    </a>
+  </div>
+</div>
+
+{% if goals %}
+  {% set total_w = goals | sum(attribute='weightage') %}
+
+  <!-- Weightage Summary -->
+  <div class="card mb-4 animate-in delay-1">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="fw-medium small">Total Weightage</span>
+        <span class="fw-bold fs-5 {% if total_w == 100 %}text-success{% else %}text-warning{% endif %}">{{ total_w }}%</span>
+      </div>
+      <div class="progress" style="height:12px;border-radius:6px;">
+        <div class="progress-bar {% if total_w == 100 %}bg-success{% elif total_w > 100 %}bg-danger{% else %}bg-warning{% endif %}"
+             style="width: {{ [total_w, 100] | min }}%; transition: width 0.5s ease;">
+        </div>
+      </div>
+      <div class="d-flex justify-content-between mt-2">
+        <span class="small text-muted">{{ goals | length }} goal(s)</span>
+        {% if total_w != 100 %}
+          <span class="small {% if total_w > 100 %}text-danger{% else %}text-warning{% endif %}">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            {% if total_w > 100 %}Over by {{ total_w - 100 }}%{% else %}Under by {{ 100 - total_w }}%{% endif %}
+          </span>
+        {% else %}
+          <span class="small text-success"><i class="bi bi-check-circle me-1"></i>Perfectly balanced</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Goals List -->
+  {% for goal in goals %}
+  <div class="card goal-card mb-3 animate-in delay-{{ loop.index }} 
+    {% if goal.status == 'approved' %}border-success{% elif goal.status == 'returned' %}border-warning{% elif goal.status == 'submitted' %}border-primary{% endif %}">
+    <div class="card-body">
+      <div class="d-flex flex-column flex-md-row justify-content-between gap-3">
+        <!-- Goal Info -->
+        <div class="flex-grow-1">
+          <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+            <span class="badge bg-primary-subtle text-primary-emphasis">{{ goal.thrust_area }}</span>
+            <span class="badge rounded-pill
+              {% if goal.status == 'approved' %}bg-success
+              {% elif goal.status == 'submitted' %}bg-primary
+              {% elif goal.status == 'returned' %}bg-warning text-dark
+              {% else %}bg-secondary{% endif %}">
+              {% if goal.is_locked %}<i class="bi bi-lock-fill me-1"></i>{% endif %}
+              {{ goal.status | capitalize }}
+            </span>
+            {% if goal.is_shared %}
+              <span class="badge bg-info-subtle text-info-emphasis">
+                <i class="bi bi-share me-1"></i>Shared
+              </span>
+            {% endif %}
+            <span class="badge bg-secondary-subtle text-secondary-emphasis">
+              <i class="bi bi-rulers me-1"></i>{{ goal.uom }}
+            </span>
+          </div>
+
+          <h6 class="fw-bold mb-2">{{ goal.title }}</h6>
+          {% if goal.description %}
+            <p class="text-muted small mb-3">{{ goal.description }}</p>
+          {% endif %}
+
+          <div class="row g-3 mb-3">
+            <div class="col-auto">
+              <div class="bg-light rounded-3 px-3 py-2 text-center">
+                <div class="small text-muted">Target</div>
+                <div class="fw-bold text-primary">{{ goal.target }}</div>
+              </div>
+            </div>
+            <div class="col-auto">
+              <div class="bg-light rounded-3 px-3 py-2 text-center">
+                <div class="small text-muted">Weightage</div>
+                <div class="fw-bold text-dark">{{ goal.weightage }}%</div>
+              </div>
+            </div>
+            <div class="col-auto">
+              <div class="bg-light rounded-3 px-3 py-2 text-center">
+                <div class="small text-muted">UoM</div>
+                <div class="fw-bold text-dark">{{ goal.uom }}</div>
+              </div>
+            </div>
+          </div>
+
+          {% if goal.manager_comment %}
+            <div class="alert alert-warning border-0 py-2 small mb-0" style="border-radius:8px;background:#fef3c7;">
+              <i class="bi bi-chat-left-text me-2 text-warning"></i>
+              <strong>Previous feedback:</strong> {{ goal.manager_comment }}
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Actions -->
+        {% if goal.status == 'submitted' %}
+        <div class="d-flex flex-column gap-2" style="min-width:160px;">
+          <form method="POST" action="{{ url_for('manager_approve_goal', goal_id=goal.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-success w-100 btn-sm">
+              <i class="bi bi-check-lg me-1"></i>Approve Goal
+            </button>
+          </form>
+
+          <button class="btn btn-outline-warning btn-sm w-100" type="button"
+                  data-bs-toggle="collapse" data-bs-target="#return-{{ goal.id }}">
+            <i class="bi bi-arrow-return-left me-1"></i>Return for Rework
+          </button>
+
+          <div class="collapse mt-1" id="return-{{ goal.id }}">
+            <form method="POST" action="{{ url_for('manager_return_goal', goal_id=goal.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="card border-0 bg-light" style="border-radius:8px;">
+                <div class="card-body p-2">
+                  <textarea name="comment" class="form-control form-control-sm mb-2" rows="2"
+                            placeholder="Explain why this goal needs rework..." required></textarea>
+                  <button type="submit" class="btn btn-warning btn-sm w-100">
+                    <i class="bi bi-send me-1"></i>Send Back
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+        {% elif goal.status == 'approved' %}
+        <div class="d-flex align-items-center gap-2 text-success">
+          <i class="bi bi-check-circle-fill fs-4"></i>
+          <span class="fw-medium small">Approved</span>
+        </div>
+        {% elif goal.status == 'returned' %}
+        <div class="d-flex align-items-center gap-2 text-warning">
+          <i class="bi bi-arrow-return-left fs-4"></i>
+          <span class="fw-medium small">Returned</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="card empty-state text-center animate-in">
+    <div class="card-body">
+      <i class="bi bi-inbox display-1 d-block mb-3"></i>
+      <h5 class="fw-bold text-muted">No Goals Yet</h5>
+      <p class="text-muted">{{ employee.name }} hasn't created any goals for this cycle.</p>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

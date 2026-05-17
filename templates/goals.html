@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+{% block title %}My Goals — AtomQuest{% endblock %}
+
+<style>
+  /* Fix dropdown text - smaller font so full text fits */
+  .goal-form-card .form-select {
+    font-size: 0.78rem;
+    padding-right: 2rem;
+    text-overflow: ellipsis;
+  }
+
+  /* Ensure dropdown options are readable */
+  .goal-form-card .form-select option {
+    font-size: 0.875rem;
+    padding: 8px;
+    white-space: normal;
+  }
+
+  /* Make form card scroll naturally with page instead of sticky */
+  .goal-form-card {
+    position: relative;
+  }
+
+  /* Fix parent overflow that might clip dropdowns */
+  .goal-form-card,
+  .goal-form-card .card-body {
+    overflow: visible;
+  }
+</style>
+
+{% block content %}
+<!-- Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 animate-in">
+  <div>
+    <h4 class="fw-bold mb-1">My Goals</h4>
+    <p class="text-muted small mb-0">
+      <i class="bi bi-bullseye me-1"></i>FY2025 Goal Setting
+      {% if goals %}
+        &middot; <span class="fw-medium">{{ goals | length }}/8 goals</span>
+      {% endif %}
+    </p>
+  </div>
+  <div class="d-flex gap-2 mt-2 mt-md-0">
+    {% if not cycle_open %}
+      <span class="badge bg-secondary py-2 px-3 d-flex align-items-center gap-1">
+        <i class="bi bi-lock"></i>Window Closed
+      </span>
+    {% else %}
+      <span class="badge bg-success py-2 px-3 d-flex align-items-center gap-1">
+        <i class="bi bi-unlock"></i>Window Open
+      </span>
+    {% endif %}
+    {% set submittable = goals | selectattr('status', 'equalto', 'draft') | list %}
+    {% if submittable and total_weightage == 100 %}
+      <form method="POST" action="{{ url_for('employee_submit_goals') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-success btn-sm">
+          <i class="bi bi-send me-1"></i>Submit All Goals
+        </button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Weightage Bar -->
+<div class="card mb-4 animate-in delay-1">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div class="d-flex align-items-center gap-2">
+        <span class="fw-semibold">Goal Progress</span>
+        {% if approved_weightage == 100 %}
+          <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Fully Approved</span>
+        {% elif approved_weightage > 0 %}
+          <span class="badge bg-primary"><i class="bi bi-check-circle me-1"></i>{{ approved_weightage }}% Approved</span>
+        {% else %}
+          <span class="badge bg-warning text-dark"><i class="bi bi-info-circle me-1"></i>Pending Approval</span>
+        {% endif %}
+      </div>
+      <span class="fw-bold fs-4 {% if approved_weightage == 100 %}text-success{% elif approved_weightage > 0 %}text-primary{% else %}text-warning{% endif %}"
+            id="weightage-label">{{ approved_weightage }}%</span>
+    </div>
+    <div class="progress" style="height:14px;border-radius:7px;background:#e2e8f0;">
+      <div class="progress-bar {% if approved_weightage == 100 %}bg-success{% elif approved_weightage > 0 %}bg-primary{% else %}bg-warning{% endif %}"
+           id="weightage-bar"
+           style="width: {{ [approved_weightage, 100] | min }}%; transition: width .4s cubic-bezier(0.4,0,0.2,1);">
+      </div>
+    </div>
+    <div class="d-flex justify-content-between mt-2">
+      <span class="small text-muted">
+        {% if total_weightage < 100 %}
+          <i class="bi bi-plus-circle me-1 text-primary"></i>
+          Total: <strong>{{ total_weightage }}%</strong> — Need {{ 100 - total_weightage }}% more
+        {% elif total_weightage > 100 %}
+          <i class="bi bi-dash-circle me-1 text-danger"></i>
+          Total: <strong>{{ total_weightage }}%</strong> — Remove {{ total_weightage - 100 }}%
+        {% else %}
+          <i class="bi bi-check-circle me-1 text-success"></i>
+          Total: <strong>100%</strong> — 
+          {% if approved_weightage == 100 %}All approved{% else %}{{ approved_weightage }}% approved, {{ total_weightage - approved_weightage }}% pending{% endif %}
+        {% endif %}
+      </span>
+      <span class="small text-muted">{{ goals | length }}/8 goals</span>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Goals List -->
+  <div class="col-lg-8">
+    {% if goals %}
+      {% for goal in goals %}
+      <div class="card goal-card mb-3 animate-in delay-{{ loop.index }}
+        {% if goal.is_locked %}border-success{% elif goal.status == 'returned' %}border-warning{% elif goal.status == 'submitted' %}border-primary{% endif %}">
+        <div class="card-body">
+          <div class="d-flex flex-column flex-md-row justify-content-between gap-3">
+            <div class="flex-grow-1">
+              <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                <span class="badge bg-primary-subtle text-primary-emphasis">{{ goal.thrust_area }}</span>
+                {% if goal.is_shared %}
+                  <span class="badge bg-info-subtle text-info-emphasis">
+                    <i class="bi bi-share me-1"></i>Shared
+                  </span>
+                {% endif %}
+                {% if goal.is_locked %}
+                  <span class="badge bg-success-subtle text-success-emphasis">
+                    <i class="bi bi-lock-fill me-1"></i>Locked
+                  </span>
+                {% endif %}
+              </div>
+
+              <h6 class="fw-bold mb-1">{{ goal.title }}</h6>
+              {% if goal.description %}
+                <p class="text-muted small mb-3">{{ goal.description }}</p>
+              {% endif %}
+
+              <div class="row g-2 mb-2">
+                <div class="col-auto">
+                  <div class="d-flex align-items-center gap-1 small text-muted bg-light rounded-2 px-2 py-1">
+                    <i class="bi bi-rulers"></i>{{ goal.uom }}
+                  </div>
+                </div>
+                <div class="col-auto">
+                  <div class="d-flex align-items-center gap-1 small text-muted bg-light rounded-2 px-2 py-1">
+                    <i class="bi bi-target"></i>Target: {{ goal.target }}
+                  </div>
+                </div>
+                <div class="col-auto">
+                  <div class="d-flex align-items-center gap-1 small fw-medium bg-primary-subtle text-primary-emphasis rounded-2 px-2 py-1">
+                    <i class="bi bi-percent"></i>{{ goal.weightage }}%
+                  </div>
+                </div>
+              </div>
+
+              {% if goal.manager_comment %}
+                <div class="alert alert-warning border-0 py-2 small mb-0 mt-2" style="border-radius:8px;background:#fef3c7;">
+                  <i class="bi bi-chat-left-text me-2 text-warning"></i>
+                  <strong>Manager:</strong> {{ goal.manager_comment }}
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="d-flex flex-column align-items-end gap-2" style="min-width:100px;">
+              <span class="badge rounded-pill
+                {% if goal.status == 'approved' %}bg-success
+                {% elif goal.status == 'submitted' %}bg-primary
+                {% elif goal.status == 'returned' %}bg-warning text-dark
+                {% else %}bg-secondary{% endif %}">
+                {{ goal.status | capitalize }}
+              </span>
+              {% if not goal.is_locked and cycle_open %}
+                <form method="POST" action="{{ url_for('employee_delete_goal', goal_id=goal.id) }}"
+                      onsubmit="return confirm('Delete this goal? This action cannot be undone.')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="btn btn-outline-danger btn-sm" title="Delete Goal">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="card empty-state text-center animate-in">
+        <div class="card-body">
+          <i class="bi bi-inbox display-1 d-block mb-3"></i>
+          <h5 class="fw-bold text-muted">No Goals Yet</h5>
+          <p class="text-muted mb-3">Add your first goal using the form on the right.</p>
+          <div class="d-flex justify-content-center gap-2">
+            <div class="badge bg-light text-muted border px-3 py-2">
+              <i class="bi bi-info-circle me-1"></i>Total must equal 100%
+            </div>
+            <div class="badge bg-light text-muted border px-3 py-2">
+              <i class="bi bi-info-circle me-1"></i>Min 10% per goal
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Add Goal Form -->
+  <div class="col-lg-4">
+    {% if cycle_open and goals | length < 8 %}
+    <div class="card goal-form-card animate-in delay-2">
+      <div class="card-header">
+        <div class="d-flex align-items-center gap-2">
+          <div class="bg-primary text-white rounded-2 d-flex align-items-center justify-content-center" style="width:32px;height:32px;">
+            <i class="bi bi-plus-lg"></i>
+          </div>
+          <div>
+            <h6 class="fw-semibold mb-0">Add New Goal</h6>
+            <p class="text-muted small mb-0">{{ goals | length }}/8 goals created</p>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <form method="POST" id="goal-form" novalidate>
+          {{ form.hidden_tag() }}
+
+          <div class="mb-3">
+            <label class="form-label">Thrust Area</label>
+            {{ form.thrust_area(class="form-select" + (" is-invalid" if form.thrust_area.errors else "")) }}
+            {% for e in form.thrust_area.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Goal Title</label>
+            {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else ""),
+                          placeholder="e.g. Increase revenue by 20%") }}
+            {% for e in form.title.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Description <span class="text-muted fw-normal">(optional)</span></label>
+            {{ form.description(class="form-control", rows=2, placeholder="Brief description of the goal...") }}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Unit of Measure</label>
+            {{ form.uom(class="form-select" + (" is-invalid" if form.uom.errors else ""), style="font-size:0.8rem;") }}
+            {% for e in form.uom.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Target Value</label>
+            {{ form.target(class="form-control" + (" is-invalid" if form.target.errors else ""),
+                           placeholder="e.g. 100") }}
+            {% for e in form.target.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label d-flex justify-content-between">
+              Weightage (%)
+              <span class="text-muted fw-normal">Remaining: <strong id="remaining-weight" class="text-primary">{{ 100 - total_weightage }}%</strong></span>
+            </label>
+            {{ form.weightage(class="form-control" + (" is-invalid" if form.weightage.errors else ""),
+                              placeholder="e.g. 20", id="weightage-input", min=1, max=100) }}
+            {% for e in form.weightage.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+            <div class="form-text small mt-1">
+              <i class="bi bi-info-circle me-1"></i>Minimum 10% per goal
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100 fw-medium">
+            <i class="bi bi-plus-lg me-2"></i>Add Goal
+          </button>
+        </form>
+      </div>
+    </div>
+    {% elif not cycle_open %}
+      <div class="card animate-in delay-2">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-lock display-4 text-muted mb-3 d-block"></i>
+          <h6 class="fw-bold text-muted">Goal Setting Closed</h6>
+          <p class="text-muted small">The goal creation window is currently closed by admin.</p>
+        </div>
+      </div>
+    {% else %}
+      <div class="card animate-in delay-2">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-trophy display-4 text-success mb-3 d-block"></i>
+          <h6 class="fw-bold text-success">Maximum Goals Reached!</h6>
+          <p class="text-muted small">You've created all 8 goals. Submit when ready.</p>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const totalWeightage = {{ total_weightage }};
+const approvedWeightage = {{ approved_weightage }};
+const weightageInput = document.getElementById('weightage-input');
+const bar = document.getElementById('weightage-bar');
+const label = document.getElementById('weightage-label');
+const remaining = document.getElementById('remaining-weight');
+
+if (weightageInput) {
+  weightageInput.addEventListener('input', function() {
+    const newVal = parseFloat(this.value) || 0;
+    const projected = totalWeightage + newVal;
+
+    if (bar) {
+      bar.style.width = Math.min(projected, 100) + '%';
+      bar.className = 'progress-bar ' + (projected === 100 ? 'bg-success' : projected > 100 ? 'bg-danger' : 'bg-warning');
+    }
+    if (label) {
+      label.textContent = projected.toFixed(1) + '%';
+      label.className = 'fw-bold fs-4 ' + (projected === 100 ? 'text-success' : projected > 100 ? 'text-danger' : 'text-warning');
+    }
+    if (remaining) {
+      const rem = Math.max(0, 100 - totalWeightage - newVal);
+      remaining.textContent = rem.toFixed(1) + '%';
+      remaining.className = rem === 0 ? 'text-success' : 'text-primary';
+    }
+  });
+}
+</script>
+{% endblock %}

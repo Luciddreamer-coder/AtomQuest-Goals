@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Check-In — {{ employee.name }}{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb & Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 animate-in">
+  <div class="d-flex align-items-center gap-3">
+    <a href="{{ url_for('manager_team') }}" class="btn btn-light btn-sm rounded-circle" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="fw-bold mb-0">{{ employee.name }}</h4>
+      <p class="text-muted small mb-0"><i class="bi bi-calendar-check me-1"></i>Quarterly Check-In Review</p>
+    </div>
+  </div>
+  <div class="quarter-tabs d-flex gap-1 mt-2 mt-md-0">
+    {% set quarter_months = {'Q1': 'Jul – Sep', 'Q2': 'Oct – Dec', 'Q3': 'Jan – Mar', 'Q4': 'Apr – Jun'} %}
+    {% for q in quarters %}
+      <a href="{{ url_for('manager_checkin_view', employee_id=employee.id, quarter=q) }}"
+         class="btn btn-sm {% if q == quarter %}btn-primary shadow-sm{% else %}btn-outline-secondary{% endif %}">
+        {{ q }}
+        <span class="ms-1" style="opacity:0.7;font-size:0.75rem;">{{ quarter_months[q] }}</span>
+        {% if q == quarter %}<i class="bi bi-check-circle-fill ms-1" style="font-size:0.6rem;"></i>{% endif %}
+      </a>
+    {% endfor %}
+  </div>
+</div>
+
+{% if goals %}
+<!-- Overall Progress -->
+{% set counts = namespace(completed=0, on_track=0, not_started=0) %}
+{% for goal in goals %}
+  {% set ci = checkins.get(goal.id) %}
+  {% if ci %}
+    {% if ci.status == 'completed' %}{% set counts.completed = counts.completed + 1 %}{% endif %}
+    {% if ci.status == 'on_track' %}{% set counts.on_track = counts.on_track + 1 %}{% endif %}
+    {% if ci.status == 'not_started' %}{% set counts.not_started = counts.not_started + 1 %}{% endif %}
+  {% else %}
+    {% set counts.not_started = counts.not_started + 1 %}
+  {% endif %}
+{% endfor %}
+
+<div class="row g-3 mb-4 animate-in delay-1">
+  <div class="col-md-4">
+    <div class="card bg-success text-white h-100 stat-card">
+      <i class="bi bi-check-circle stat-icon"></i>
+      <div class="card-body text-center py-3">
+        <div class="fs-2 fw-bold">{{ counts.completed }}</div>
+        <div class="small" style="opacity:0.8">Completed</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card bg-primary text-white h-100 stat-card">
+      <i class="bi bi-arrow-up-circle stat-icon"></i>
+      <div class="card-body text-center py-3">
+        <div class="fs-2 fw-bold">{{ counts.on_track }}</div>
+        <div class="small" style="opacity:0.8">On Track</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card bg-secondary text-white h-100 stat-card">
+      <i class="bi bi-circle stat-icon"></i>
+      <div class="card-body text-center py-3">
+        <div class="fs-2 fw-bold">{{ counts.not_started }}</div>
+        <div class="small" style="opacity:0.8">Not Started</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Check-In Table -->
+<div class="card animate-in delay-2">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h6 class="fw-semibold mb-0"><i class="bi bi-table me-2 text-primary"></i>{{ quarter }} Check-In Details</h6>
+    <span class="badge bg-light text-muted border">{{ goals | length }} goals</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Goal</th>
+          <th>UoM / Target</th>
+          <th class="text-center">Planned</th>
+          <th class="text-center">Actual</th>
+          <th class="text-center">Score</th>
+          <th class="text-center">Status</th>
+          <th>Manager Comment</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for goal in goals %}
+        {% set ci = checkins.get(goal.id) %}
+        <tr>
+          <td style="min-width:200px;">
+            <div class="fw-semibold small">{{ goal.title }}</div>
+            <span class="badge bg-primary-subtle text-primary-emphasis small">{{ goal.thrust_area }}</span>
+          </td>
+          <td>
+            <span class="badge bg-secondary-subtle text-secondary-emphasis small">{{ goal.uom }}</span>
+            <div class="small text-muted mt-1">Target: {{ goal.target }}</div>
+          </td>
+          <td class="text-center">
+            <span class="fw-medium">{{ ci.planned if ci and ci.planned is not none else '—' }}</span>
+          </td>
+          <td class="text-center">
+            <span class="fw-medium">{{ ci.actual if ci and ci.actual is not none else '—' }}</span>
+          </td>
+          <td class="text-center">
+            {% if ci and ci.score is not none %}
+              <div class="d-flex align-items-center justify-content-center gap-2">
+                <div class="progress flex-grow-1" style="width:60px;height:6px;">
+                  <div class="progress-bar {% if ci.score >= 80 %}bg-success{% elif ci.score >= 50 %}bg-warning{% else %}bg-danger{% endif %}"
+                       style="width: {{ [ci.score, 100] | min }}%"></div>
+                </div>
+                <span class="fw-bold small {% if ci.score >= 80 %}text-success{% elif ci.score >= 50 %}text-warning{% else %}text-danger{% endif %}">
+                  {{ '%.1f' | format(ci.score) }}
+                </span>
+              </div>
+            {% else %}<span class="text-muted small">—</span>{% endif %}
+          </td>
+          <td class="text-center">
+            {% if ci %}
+              <span class="badge
+                {% if ci.status == 'completed' %}bg-success
+                {% elif ci.status == 'on_track' %}bg-primary
+                {% else %}bg-secondary{% endif %}">
+                <i class="bi bi-{% if ci.status == 'completed' %}check-circle{% elif ci.status == 'on_track' %}arrow-up-circle{% else %}circle{% endif %} me-1"></i>
+                {{ ci.status | replace('_', ' ') | title }}
+              </span>
+            {% else %}<span class="text-muted small">No data</span>{% endif %}
+          </td>
+          <td style="min-width:220px;">
+            {% if ci %}
+            <form method="POST" action="{{ url_for('manager_add_comment', checkin_id=ci.id) }}" class="d-flex gap-1">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="text" name="comment" class="form-control form-control-sm"
+                     value="{{ ci.manager_comment or '' }}" placeholder="Add feedback...">
+              <button type="submit" class="btn btn-outline-primary btn-sm px-2">
+                <i class="bi bi-send"></i>
+              </button>
+            </form>
+            {% else %}<span class="text-muted small">No check-in yet</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+  <div class="card empty-state text-center animate-in">
+    <div class="card-body">
+      <i class="bi bi-clipboard-x display-1 d-block mb-3"></i>
+      <h5 class="fw-bold text-muted">No Approved Goals</h5>
+      <p class="text-muted">This employee has no approved goals to review yet.</p>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

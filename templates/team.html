@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}My Team — AtomQuest{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 animate-in">
+  <div>
+    <h4 class="fw-bold mb-1">My Team</h4>
+    <p class="text-muted small mb-0">
+      <i class="bi bi-people me-1"></i>{{ team_data | length }} direct report{{ 's' if team_data | length != 1 else '' }} &middot; 
+      <span class="text-primary">FY2025</span>
+    </p>
+  </div>
+  <div class="d-flex gap-2 mt-2 mt-md-0">
+    <div class="input-group input-group-sm" style="width:200px;">
+      <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
+      <input type="text" class="form-control bg-light border-start-0" id="teamSearch" placeholder="Search team...">
+    </div>
+    <a href="{{ url_for('export_goals') }}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-download me-1"></i>Export
+    </a>
+  </div>
+</div>
+
+{% if team_data %}
+  <div class="row g-4" id="teamGrid">
+    {% for item in team_data %}
+    <div class="col-md-6 team-card animate-in delay-{{ loop.index }}">
+      <div class="card h-100">
+        <div class="card-body">
+          <!-- Employee Header -->
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="avatar-circle avatar-lg" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">
+              {{ item.employee.name[0] }}
+            </div>
+            <div class="flex-grow-1">
+              <h6 class="fw-bold mb-0">{{ item.employee.name }}</h6>
+              <p class="text-muted small mb-0">{{ item.employee.email }}</p>
+            </div>
+            {% if item.submitted_count > 0 %}
+              <span class="badge bg-danger rounded-pill animate-pulse">{{ item.submitted_count }}</span>
+            {% endif %}
+          </div>
+
+          <!-- Stats -->
+          <div class="row g-2 mb-3">
+            <div class="col-4">
+              <div class="bg-light rounded-3 p-2 text-center">
+                <div class="fw-bold text-dark">{{ item.total }}</div>
+                <div class="small text-muted" style="font-size:0.7rem;">Total</div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="rounded-3 p-2 text-center" style="background:#fef3c7;">
+                <div class="fw-bold text-warning">{{ item.submitted_count }}</div>
+                <div class="small text-muted" style="font-size:0.7rem;">Pending</div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="rounded-3 p-2 text-center" style="background:#d1fae5;">
+                <div class="fw-bold text-success">{{ item.approved_count }}</div>
+                <div class="small text-muted" style="font-size:0.7rem;">Approved</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          {% if item.total > 0 %}
+          <div class="mb-3">
+            <div class="d-flex justify-content-between small mb-1">
+              <span class="text-muted">Progress</span>
+              <span class="fw-medium">{{ "%.0f" | format(item.approved_count / item.total * 100) }}%</span>
+            </div>
+            <div class="progress" style="height:6px;border-radius:3px;">
+              <div class="progress-bar bg-success" style="width: {{ item.approved_count / item.total * 100 }}%"></div>
+            </div>
+          </div>
+          {% endif %}
+
+          <!-- Actions -->
+          <div class="d-flex gap-2">
+            <a href="{{ url_for('manager_approve_view', employee_id=item.employee.id) }}"
+               class="btn btn-primary btn-sm flex-grow-1">
+              <i class="bi bi-clipboard-check me-1"></i>Review Goals
+              {% if item.submitted_count > 0 %}
+                <span class="badge bg-white text-primary ms-1">{{ item.submitted_count }}</span>
+              {% endif %}
+            </a>
+            <a href="{{ url_for('manager_checkin_view', employee_id=item.employee.id) }}"
+               class="btn btn-outline-secondary btn-sm" title="View Check-Ins">
+              <i class="bi bi-calendar-check"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card empty-state text-center animate-in">
+    <div class="card-body">
+      <i class="bi bi-people display-1 d-block mb-3"></i>
+      <h5 class="fw-bold text-muted">No Direct Reports</h5>
+      <p class="text-muted">You don't have any team members assigned yet.</p>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Team search
+const searchInput = document.getElementById('teamSearch');
+if (searchInput) {
+  searchInput.addEventListener('input', function() {
+    const term = this.value.toLowerCase();
+    document.querySelectorAll('.team-card').forEach(card => {
+      const text = card.textContent.toLowerCase();
+      card.style.display = text.includes(term) ? '' : 'none';
+    });
+  });
+}
+</script>
+<style>
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+.animate-pulse { animation: pulse 2s infinite; }
+</style>
+{% endblock %}

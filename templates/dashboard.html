@@ -1,0 +1,548 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard — AtomQuest{% endblock %}
+
+{% block content %}
+<!-- Escalation Warnings Panel -->
+{% if escalation_warnings %}
+<div class="card mb-4 border-0 shadow-sm animate-in" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+  <div class="card-body">
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <div class="bg-warning text-white rounded-circle d-flex align-items-center justify-content-center" style="width:36px;height:36px;">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+      </div>
+      <h5 class="fw-bold mb-0 text-dark">Escalation Alerts</h5>
+      <span class="badge bg-danger rounded-pill">{{ escalation_warnings | length }} active</span>
+    </div>
+    <div class="row g-2">
+      {% for warning in escalation_warnings %}
+      <div class="col-md-6 col-lg-4">
+        <div class="alert alert-{{ warning.severity }} border-0 mb-0 d-flex flex-column gap-2" style="border-radius:10px;">
+          <div class="d-flex align-items-start gap-2">
+            <i class="bi bi-{% if warning.type == 'employee' %}person{% elif warning.type == 'manager' %}people{% else %}calendar-check{% endif %}-fill mt-1"></i>
+            <div class="small">{{ warning.message | safe }}</div>
+          </div>
+          <a href="{{ warning.link }}" class="btn btn-sm btn-{{ warning.severity }} w-100">
+            <i class="bi bi-arrow-right-circle me-1"></i>{{ warning.action }}
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 animate-in">
+  <div>
+    <h4 class="fw-bold mb-1">Admin Dashboard</h4>
+    <p class="text-muted small mb-0">
+      <i class="bi bi-calendar3 me-1"></i>FY2025 &middot; 
+      <span class="{% if cycle_open %}text-success{% else %}text-muted{% endif %}">
+        <i class="bi bi-{% if cycle_open %}unlock{% else %}lock{% endif %} me-1"></i>
+        Goal Window {% if cycle_open %}Open{% else %}Closed{% endif %}
+      </span>
+    </p>
+  </div>
+  <div class="d-flex gap-2 mt-2 mt-md-0">
+    <form method="POST" action="{{ url_for('admin_toggle_cycle') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-sm {% if cycle_open %}btn-outline-danger{% else %}btn-success{% endif %}">
+        <i class="bi {% if cycle_open %}bi-lock me-1{% else %}bi-unlock me-1{% endif %}"></i>
+        {% if cycle_open %}Close Window{% else %}Open Window{% endif %}
+      </button>
+    </form>
+    <a href="{{ url_for('export_goals') }}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-download me-1"></i>Export Report
+    </a>
+    <a href="{{ url_for('export_audit') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-file-earmark-text me-1"></i>Audit CSV
+    </a>
+  </div>
+</div>
+
+<!-- Stats Row -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3 animate-in delay-1">
+    <div class="card stat-card bg-primary text-white h-100">
+      <i class="bi bi-people stat-icon"></i>
+      <div class="card-body py-4 px-3">
+        <div class="small mb-1" style="opacity:0.8">Total Employees</div>
+        <div class="fs-2 fw-bold">{{ total }}</div>
+        <div class="small mt-2" style="opacity:0.7">
+          <i class="bi bi-arrow-up me-1"></i>Active workforce
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3 animate-in delay-2">
+    <div class="card stat-card bg-success text-white h-100">
+      <i class="bi bi-check-circle stat-icon"></i>
+      <div class="card-body py-4 px-3">
+        <div class="small mb-1" style="opacity:0.8">Fully Approved</div>
+        <div class="fs-2 fw-bold">{{ approved_count }}</div>
+        <div class="small mt-2" style="opacity:0.7">
+          {% if total > 0 %}{{ "%.0f" | format(approved_count / total * 100) }}%{% else %}0%{% endif %} completion
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3 animate-in delay-3">
+    <div class="card stat-card bg-warning text-dark h-100">
+      <i class="bi bi-hourglass-split stat-icon"></i>
+      <div class="card-body py-4 px-3">
+        <div class="small mb-1" style="opacity:0.8">Pending Review</div>
+        <div class="fs-2 fw-bold">{{ submitted_count }}</div>
+        <div class="small mt-2" style="opacity:0.7">
+          Awaiting manager approval
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3 animate-in delay-4">
+    <div class="card stat-card bg-secondary text-white h-100">
+      <i class="bi bi-pencil-square stat-icon"></i>
+      <div class="card-body py-4 px-3">
+        <div class="small mb-1" style="opacity:0.8">In Draft</div>
+        <div class="fs-2 fw-bold">{{ draft_count }}</div>
+        <div class="small mt-2" style="opacity:0.7">
+          Not yet submitted
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Completion Donut Chart -->
+  <div class="col-lg-4 animate-in delay-2">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="fw-semibold mb-0"><i class="bi bi-pie-chart me-2 text-primary"></i>Completion Overview</h6>
+      </div>
+      <div class="card-body d-flex align-items-center justify-content-center py-4">
+        <div style="position:relative; width:100%; max-width:280px;">
+          <canvas id="completionChart"></canvas>
+          <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center;">
+            <div class="fs-3 fw-bold text-dark">{{ total }}</div>
+            <div class="small text-muted">Total</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Goal Distribution Charts -->
+  <div class="col-lg-4 animate-in delay-2">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="fw-semibold mb-0"><i class="bi bi-bar-chart me-2 text-primary"></i>Goal Distribution</h6>
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <div class="small text-muted mb-2 text-center">By Thrust Area</div>
+          <div style="position:relative; width:100%; max-width:220px; margin:0 auto;">
+            <canvas id="thrustChart"></canvas>
+          </div>
+        </div>
+        <hr class="my-3">
+        <div>
+          <div class="small text-muted mb-2 text-center">By Unit of Measure</div>
+          <div style="position:relative; width:100%; max-width:220px; margin:0 auto;">
+            <canvas id="uomChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manager Effectiveness Leaderboard -->
+  <div class="col-lg-4 animate-in delay-3">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="fw-semibold mb-0"><i class="bi bi-trophy me-2 text-primary"></i>Manager Leaderboard</h6>
+        <span class="badge bg-light text-muted border">{{ manager_leaderboard | length }} managers</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th style="width:40px" class="text-center">#</th>
+                <th>Manager</th>
+                <th class="text-center">Team</th>
+                <th class="text-center">Check-Ins</th>
+                <th class="text-end">Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in manager_leaderboard %}
+              <tr>
+                <td class="text-center">
+                  {% if loop.index == 1 %}
+                    <span class="badge bg-warning text-dark rounded-circle" style="width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;">
+                      <i class="bi bi-trophy-fill" style="font-size:0.7rem;"></i>
+                    </span>
+                  {% elif loop.index == 2 %}
+                    <span class="badge bg-secondary rounded-circle" style="width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;">2</span>
+                  {% elif loop.index == 3 %}
+                    <span class="badge rounded-circle" style="width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;background:#cd7f32;color:#fff;">3</span>
+                  {% else %}
+                    <span class="text-muted small">{{ loop.index }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="avatar-circle" style="width:32px;height:32px;font-size:0.75rem;background:linear-gradient(135deg,#f59e0b,#d97706);">
+                      {{ item.manager.name[0] }}
+                    </div>
+                    <div>
+                      <div class="fw-semibold small">{{ item.manager.name }}</div>
+                      <div class="small text-muted" style="font-size:0.7rem;">{{ item.manager.email }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="text-center">
+                  <span class="badge bg-light text-dark border">{{ item.team_size }}</span>
+                </td>
+                <td class="text-center">
+                  <span class="small fw-medium">{{ item.completed_checkins }}/{{ item.total_checkins }}</span>
+                </td>
+                <td class="text-end">
+                  <div class="d-flex align-items-center justify-content-end gap-2">
+                    <div class="progress flex-grow-1" style="width:50px;height:6px;">
+                      <div class="progress-bar {% if item.completion_rate >= 80 %}bg-success{% elif item.completion_rate >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                           style="width: {{ item.completion_rate }}%"></div>
+                    </div>
+                    <span class="fw-bold small {% if item.completion_rate >= 80 %}text-success{% elif item.completion_rate >= 50 %}text-warning{% else %}text-danger{% endif %}">
+                      {{ "%.0f" | format(item.completion_rate) }}%
+                    </span>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if not manager_leaderboard %}
+        <div class="text-center py-4 text-muted small">
+          <i class="bi bi-people display-6 d-block mb-2 opacity-25"></i>
+          No managers found
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Employee Table -->
+<div class="row g-4 mt-1">
+  <div class="col-12 animate-in delay-3">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="fw-semibold mb-0"><i class="bi bi-people me-2 text-primary"></i>All Employees</h6>
+        <div class="input-group input-group-sm" style="width:220px;">
+          <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
+          <input type="text" class="form-control bg-light border-start-0" id="empSearch" placeholder="Search employees...">
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" id="empTable">
+          <thead class="table-light">
+            <tr>
+              <th>Employee</th>
+              <th>Status</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for emp in all_employees %}
+            {% set s = status_data[emp.id] %}
+            <tr class="emp-row">
+              <td>
+                <div class="d-flex align-items-center gap-3">
+                  <div class="avatar-circle" style="width:38px;height:38px;font-size:0.875rem;background:linear-gradient(135deg,#6366f1,#8b5cf6);">
+                    {{ emp.name[0] }}
+                  </div>
+                  <div>
+                    <div class="fw-semibold">{{ emp.name }}</div>
+                    <div class="small text-muted">{{ emp.email }}</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="badge rounded-pill
+                  {% if s == 'approved' %}bg-success
+                  {% elif s == 'submitted' %}bg-warning text-dark
+                  {% elif s == 'draft' %}bg-secondary
+                  {% else %}bg-light text-muted border{% endif %}">
+                  <i class="bi bi-{% if s == 'approved' %}check-circle{% elif s == 'submitted' %}hourglass-split{% elif s == 'draft' %}pencil{% else %}dash-circle{% endif %} me-1"></i>
+                  {% if s == 'approved' %}Approved
+                  {% elif s == 'submitted' %}Pending Review
+                  {% elif s == 'draft' %}In Draft
+                  {% else %}No Goals{% endif %}
+                </span>
+              </td>
+              <td class="text-end">
+                <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal"
+                        data-bs-target="#unlockModal" data-empname="{{ emp.name }}"
+                        data-empid="{{ emp.id }}">
+                  <i class="bi bi-unlock me-1"></i>Unlock
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Audit Log -->
+{% if audit_logs %}
+<div class="card mt-4 animate-in delay-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h6 class="fw-semibold mb-0"><i class="bi bi-journal-text me-2 text-primary"></i>Recent Audit Log</h6>
+    <div class="d-flex gap-2">
+      <span class="badge bg-light text-muted border">{{ audit_logs | length }} entries</span>
+      <a href="{{ url_for('export_audit') }}" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem;">
+        <i class="bi bi-download"></i> CSV
+      </a>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr>
+          <th style="width:140px">Time</th>
+          <th style="width:140px">Admin</th>
+          <th style="width:160px">Action</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in audit_logs %}
+        <tr>
+          <td class="text-muted small">
+            <i class="bi bi-clock me-1"></i>{{ log.timestamp.strftime('%d %b %H:%M') }}
+          </td>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <div class="avatar-circle" style="width:24px;height:24px;font-size:0.625rem;">{{ log.user.name[0] }}</div>
+              <span class="small">{{ log.user.name }}</span>
+            </div>
+          </td>
+          <td>
+            <span class="badge bg-secondary-subtle text-secondary-emphasis small">
+              {{ log.action | replace('_', ' ') | title }}
+            </span>
+          </td>
+          <td class="small">{{ log.reason or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Unlock Modal -->
+<div class="modal fade" id="unlockModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg" style="border-radius:16px;">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title fw-bold"><i class="bi bi-unlock text-danger me-2"></i>Unlock Goal</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" id="unlock-form" action="">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-body pt-3">
+          <div class="alert alert-light border mb-3">
+            <i class="bi bi-info-circle me-2 text-primary"></i>
+            Unlocking will revert the goal to <strong>draft status</strong> for <strong id="unlock-empname"></strong>.
+          </div>
+          <label class="form-label fw-medium small">Reason for unlocking <span class="text-danger">*</span></label>
+          <textarea name="reason" class="form-control" rows="3"
+                    placeholder="e.g. Employee requested revision due to role change" required></textarea>
+          <div class="form-text small mt-2">
+            <i class="bi bi-shield-check me-1"></i>This action will be logged for audit purposes.
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger btn-sm">
+            <i class="bi bi-unlock me-1"></i>Confirm Unlock
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Completion Donut Chart
+const ctx = document.getElementById('completionChart').getContext('2d');
+new Chart(ctx, {
+  type: 'doughnut',
+  data: {
+    labels: ['Approved', 'Pending Review', 'Draft / None'],
+    datasets: [{
+      data: [{{ approved_count }}, {{ submitted_count }}, {{ draft_count }}],
+      backgroundColor: ['#059669', '#d97706', '#94a3b8'],
+      borderWidth: 0,
+      hoverOffset: 8,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: {
+      legend: { 
+        position: 'bottom', 
+        labels: { 
+          padding: 20, 
+          font: { size: 12, family: 'Inter' },
+          usePointStyle: true,
+          pointStyle: 'circle'
+        } 
+      },
+      tooltip: {
+        backgroundColor: '#1e293b',
+        padding: 12,
+        cornerRadius: 8,
+        callbacks: {
+          label: function(context) {
+            const total = context.dataset.data.reduce((a,b) => a+b, 0);
+            const pct = total > 0 ? ((context.raw / total) * 100).toFixed(0) : 0;
+            return ` ${context.label}: ${context.raw} (${pct}%)`;
+          }
+        }
+      }
+    },
+    cutout: '75%',
+    animation: { animateScale: true, animateRotate: true }
+  }
+});
+
+// Thrust Area Distribution Pie Chart
+const thrustData = {{ thrust_distribution | tojson }};
+const thrustCtx = document.getElementById('thrustChart').getContext('2d');
+new Chart(thrustCtx, {
+  type: 'pie',
+  data: {
+    labels: Object.keys(thrustData),
+    datasets: [{
+      data: Object.values(thrustData),
+      backgroundColor: ['#2563eb', '#059669', '#d97706', '#dc2626', '#0891b2', '#7c3aed'],
+      borderWidth: 2,
+      borderColor: '#fff',
+      hoverOffset: 6
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: {
+      legend: { 
+        position: 'right',
+        labels: { 
+          padding: 10, 
+          font: { size: 11, family: 'Inter' },
+          usePointStyle: true,
+          pointStyle: 'circle',
+          boxWidth: 8
+        } 
+      },
+      tooltip: {
+        backgroundColor: '#1e293b',
+        padding: 10,
+        cornerRadius: 8,
+        callbacks: {
+          label: function(context) {
+            const total = context.dataset.data.reduce((a,b) => a+b, 0);
+            const pct = total > 0 ? ((context.raw / total) * 100).toFixed(0) : 0;
+            return ` ${context.label}: ${context.raw} (${pct}%)`;
+          }
+        }
+      }
+    }
+  }
+});
+
+// UoM Distribution Pie Chart
+const uomLabels = {
+  'numeric_min': 'Numeric (Min)',
+  'numeric_max': 'Numeric (Max)',
+  'percentage_min': '% (Min)',
+  'percentage_max': '% (Max)',
+  'timeline': 'Timeline',
+  'zero': 'Zero-based'
+};
+const uomData = {{ uom_distribution | tojson }};
+const uomCtx = document.getElementById('uomChart').getContext('2d');
+new Chart(uomCtx, {
+  type: 'pie',
+  data: {
+    labels: Object.keys(uomData).map(k => uomLabels[k] || k),
+    datasets: [{
+      data: Object.values(uomData),
+      backgroundColor: ['#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#6b7280'],
+      borderWidth: 2,
+      borderColor: '#fff',
+      hoverOffset: 6
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: {
+      legend: { 
+        position: 'right',
+        labels: { 
+          padding: 10, 
+          font: { size: 11, family: 'Inter' },
+          usePointStyle: true,
+          pointStyle: 'circle',
+          boxWidth: 8
+        } 
+      },
+      tooltip: {
+        backgroundColor: '#1e293b',
+        padding: 10,
+        cornerRadius: 8,
+        callbacks: {
+          label: function(context) {
+            const total = context.dataset.data.reduce((a,b) => a+b, 0);
+            const pct = total > 0 ? ((context.raw / total) * 100).toFixed(0) : 0;
+            return ` ${context.label}: ${context.raw} (${pct}%)`;
+          }
+        }
+      }
+    }
+  }
+});
+
+// Unlock modal
+const unlockModal = document.getElementById('unlockModal');
+unlockModal.addEventListener('show.bs.modal', function(e) {
+  const btn = e.relatedTarget;
+  document.getElementById('unlock-empname').textContent = btn.getAttribute('data-empname');
+  document.getElementById('unlock-form').action = '/admin/employee/' + btn.getAttribute('data-empid') + '/unlock';
+});
+
+// Employee search
+const searchInput = document.getElementById('empSearch');
+if (searchInput) {
+  searchInput.addEventListener('input', function() {
+    const term = this.value.toLowerCase();
+    document.querySelectorAll('.emp-row').forEach(row => {
+      const text = row.textContent.toLowerCase();
+      row.style.display = text.includes(term) ? '' : 'none';
+    });
+  });
+}
+</script>
+{% endblock %}
